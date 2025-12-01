@@ -1,6 +1,8 @@
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 import requests
+import aiohttp
+import asyncio
 
 def normalize_url(url):
     parsed_url = urlparse(url)
@@ -135,15 +137,15 @@ def crawl_page(base_url, current_url=None, page_data=None):
 
 
 
-Class AsyncCrawler():
-    def __init___(self, base_url, base_domain, page_data, lock, max_concurrency, semaphore, session):
+class AsyncCrawler():
+    def __init__(self, base_url):
         self.base_url = base_url
-        self.base_domain = base_domain
-        self.page_data = page_data
-        self.lock = lock
-        self.max_concurrency = max_concurrency
-        self.semaphore = semaphore
-        self.session = session
+        self.base_domain = urlparse(base_url).netloc
+        self.page_data = {}
+        self.lock = asyncio.Lock()
+        self.max_concurrency = 2
+        self.semaphore = asyncio.Semaphore(self.max_concurrency)
+        self.session = None
     
     async def __aenter__(self):
 		self.session = aiohttp.ClientSession()
@@ -153,3 +155,67 @@ Class AsyncCrawler():
 		await self.session.close()
 
     async def add_page_visit(self, normalized_url):
+
+        # ... later
+        async with self.lock:
+            if normalized_url not in self.page_data:
+                self.page_data[normalized_url] = None
+                return True 
+            else:
+                return False 
+
+    async def get_html(self, url):
+        try:
+            async with self.session.get(url, headers={"User-Agent": "BootCrawler/1.0"}) as resp:
+                if resp.status >= 400:
+                    print("Failed to process request")
+                    return None
+                
+                if "text/html" not in resp.headers['content-type']:
+                    print("The content type should be text or html")
+                    return None
+
+                return await resp.text()
+            
+        except Exception as e:
+            print(f"{e}")
+            return None
+
+    async def crawl_page(self, current_url):    
+        parsed_current_url = urlparse(current_url)
+        
+        
+        hostname = parsed_current_url.netloc.lower()
+        
+
+        if hostname != self.base_domain:
+            return
+
+        norm_url = normalize_url(current_url)
+
+        is_new = await  self.add_page_visit(norm_url)
+        if not is_new:
+            return
+
+        async with self.semaphore:
+        html = await self.get_html(current_url)
+        if html is None:
+            return
+
+        page_info = extract_page_data(html, current_url)
+
+        # store page_info safely
+        async with self.lock:
+            self.page_data[normalized_url] = page_info
+
+        next_urls = get_urls_from_html(html, self.base_url)
+
+    # 5. Spawn tasks for child URLs
+        tasks = []
+        for next_url in next_urls:
+            task = asyncio.create_task(self.crawl_page(next_url))
+            tasks.append(task)
+
+        if tasks:
+            await asyncio.gather(*tasks)
+
