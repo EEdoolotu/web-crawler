@@ -1,5 +1,6 @@
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
+import requests
 
 def normalize_url(url):
     parsed_url = urlparse(url)
@@ -73,3 +74,82 @@ def extract_page_data(html, page_url):
         }
     return expected
 
+
+def get_html(url):
+    try:
+        r = requests.get(url, headers={"User-Agent": "BootCrawler/1.0"})
+    except Exception as e:
+        raise Exception(f"something went wrong: {e}")
+
+    if r.status_code >= 400:
+        raise ValueError("Failed to process request")
+
+    if "text/html" not in r.headers['content-type']:
+        raise ValueError("The content type should be text or html")
+
+
+    return r.text
+
+def safe_get_html(url):
+    try:
+        return get_html(url)
+    except Exception as e:
+        print(f"{e}")
+        return None
+    
+
+def crawl_page(base_url, current_url=None, page_data=None):
+    if page_data is None:
+        page_data = {}
+
+    if current_url is None:
+        current_url = base_url
+    
+    parsed_current_url = urlparse(current_url)
+    parsed_base_url = urlparse(base_url)
+    
+    hostname = parsed_current_url.netloc.lower()
+    domain = parsed_base_url.netloc.lower()
+
+    if hostname != domain:
+        return page_data
+    else:
+        normal_url = normalize_url(current_url)
+        
+        if normal_url in page_data:
+            return page_data
+        else:
+            data= safe_get_html(current_url)
+            if data is None:
+                return page_data
+            print(f"Currently crawling: {current_url}")
+            extracted_data = extract_page_data(data, current_url)
+            page_data[normal_url] = extracted_data
+
+            url_list = get_urls_from_html(data, base_url)
+            for url in url_list:
+                page_data = crawl_page(base_url, url, page_data)
+
+    return page_data
+
+
+
+
+Class AsyncCrawler():
+    def __init___(self, base_url, base_domain, page_data, lock, max_concurrency, semaphore, session):
+        self.base_url = base_url
+        self.base_domain = base_domain
+        self.page_data = page_data
+        self.lock = lock
+        self.max_concurrency = max_concurrency
+        self.semaphore = semaphore
+        self.session = session
+    
+    async def __aenter__(self):
+		self.session = aiohttp.ClientSession()
+		return self
+
+	async def __aexit__(self, exc_type, exc_val, exc_tb):
+		await self.session.close()
+
+    async def add_page_visit(self, normalized_url):
