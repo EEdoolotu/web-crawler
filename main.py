@@ -1,6 +1,7 @@
 import sys
 import asyncio
 from crawl import crawl_site_async
+from csv_report import write_csv_report
 
 
 async def main():
@@ -19,6 +20,7 @@ async def main():
     print(f"Starting async crawl of: {base_url}")
 
     page_data = await crawl_site_async(base_url, max_concurrency, max_pages)
+    write_csv_report(page_data)
 
     for page in page_data.values():
         print(f"Found {len(page['outgoing_links'])} outgoing links on {page['url']}")
