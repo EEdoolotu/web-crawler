@@ -1,29 +1,30 @@
 import sys
-from crawl import crawl_page
+import asyncio
+from crawl import crawl_site_async
 
-print("Script name:", sys.argv[0]) # example.py
 
-
-def main():
-    print("Hello from web-crawler!")
-    
-
-    if len(sys.argv) < 2:
+async def main():
+    args = sys.argv
+    if len(args) < 2:
         print("no website provided")
         sys.exit(1)
-    elif len(sys.argv) > 2:
+    if len(args) > 4:
         print("too many arguments provided")
         sys.exit(1)
-    
-    BASE_URL = sys.argv[1]
-    print(f"starting crawl of {BASE_URL}")
 
-    page_data = crawl_page(BASE_URL)
-    
-    print(f"Total pages crawled: {len(page_data)}")
-    for url, data in page_data.items():
-        print(f"{url}: {data}")
+    base_url = args[1]
+    max_concurrency = int(args[2])
+    max_pages = int(args[3])
+
+    print(f"Starting async crawl of: {base_url}")
+
+    page_data = await crawl_site_async(base_url, max_concurrency, max_pages)
+
+    for page in page_data.values():
+        print(f"Found {len(page['outgoing_links'])} outgoing links on {page['url']}")
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
